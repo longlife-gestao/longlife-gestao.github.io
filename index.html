@@ -939,9 +939,9 @@ async function exportar(tipo="financeiro"){
 const SB_URL="https://aahgewhdxjsmjbnetgtn.supabase.co",SB_KEY="sb_publishable_dIl2Fn-LQN2ZhOvSW7hW6Q_X0EYov4k";
 const LANG_FILE={pt:"index.html",es:"es.html",en:"en.html"};
 const TX={
- pt:{t:"Entrar no sistema",email:"Email",senha:"Senha",entrar:"Entrar",esq:"Esqueci a senha",env:"Enviámos um link para redefinir a senha.",nova:"Nova senha",guardar:"Guardar senha",erro:"Email ou senha inválidos.",sem:"Este utilizador não tem acesso a nenhuma franquia.",sair:"Sair",todas:"Todas as franquias",util:"Utilizadores",fechar:"Fechar",nome:"Nome",papel:"Papel",fr:"Franquia",ativo:"Ativo",criar:"Criar utilizador",tmp:"Senha temporária (mín. 8)",ok:"Guardado",ro:"Só leitura (outra franquia)",lig:"Ligado",papeis:{gestor:"Gestor",admin:"Admin",medico:"Médico",administrativo:"Administrativo"},redef:"Nova senha",carreg:"Carregando…"},
- es:{t:"Entrar al sistema",email:"Email",senha:"Contraseña",entrar:"Entrar",esq:"Olvidé mi contraseña",env:"Te enviamos un enlace para restablecer la contraseña.",nova:"Nueva contraseña",guardar:"Guardar contraseña",erro:"Email o contraseña no válidos.",sem:"Este usuario no tiene acceso a ninguna franquicia.",sair:"Salir",todas:"Todas las franquicias",util:"Usuarios",fechar:"Cerrar",nome:"Nombre",papel:"Rol",fr:"Franquicia",ativo:"Activo",criar:"Crear usuario",tmp:"Contraseña temporal (mín. 8)",ok:"Guardado",ro:"Solo lectura (otra franquicia)",lig:"Conectado",papeis:{gestor:"Gestor",admin:"Admin",medico:"Médico",administrativo:"Administrativo"},redef:"Nueva contraseña",carreg:"Cargando…"},
- en:{t:"Sign in",email:"Email",senha:"Password",entrar:"Sign in",esq:"Forgot password",env:"We sent you a link to reset your password.",nova:"New password",guardar:"Save password",erro:"Invalid email or password.",sem:"This user has no access to any branch.",sair:"Sign out",todas:"All branches",util:"Users",fechar:"Close",nome:"Name",papel:"Role",fr:"Branch",ativo:"Active",criar:"Create user",tmp:"Temporary password (min. 8)",ok:"Saved",ro:"Read only (other branch)",lig:"Connected",papeis:{gestor:"Manager",admin:"Admin",medico:"Doctor",administrativo:"Staff"},redef:"New password",carreg:"Loading…"}
+ pt:{t:"Entrar no sistema",email:"Email",senha:"Senha",entrar:"Entrar",esq:"Esqueci a senha",env:"Enviámos um link para redefinir a senha.",nova:"Nova senha",guardar:"Guardar senha",erro:"Email ou senha inválidos.",sem:"Este utilizador não tem acesso a nenhuma franquia.",sair:"Sair",todas:"Todas as franquias",util:"Utilizadores",fechar:"Fechar",nome:"Nome",papel:"Papel",fr:"Franquia",ativo:"Ativo",criar:"Criar utilizador",tmp:"Senha temporária (mín. 8)",ok:"Guardado",ro:"Só leitura (outra franquia)",lig:"Ligado",papeis:{gestor:"Gestor",admin:"Admin",medico:"Médico",administrativo:"Administrativo"},redef:"Nova senha",carreg:"Carregando…",frq:"Franquias",novaFr:"Nova franquia",pais:"País (código, ex.: BR)",moeda:"Moeda",idioma:"Idioma do sistema",ativa:"Ativa",criarFr:"Criar franquia",guardarFr:"Guardar",inativa:"(inativa)"},
+ es:{t:"Entrar al sistema",email:"Email",senha:"Contraseña",entrar:"Entrar",esq:"Olvidé mi contraseña",env:"Te enviamos un enlace para restablecer la contraseña.",nova:"Nueva contraseña",guardar:"Guardar contraseña",erro:"Email o contraseña no válidos.",sem:"Este usuario no tiene acceso a ninguna franquicia.",sair:"Salir",todas:"Todas las franquicias",util:"Usuarios",fechar:"Cerrar",nome:"Nombre",papel:"Rol",fr:"Franquicia",ativo:"Activo",criar:"Crear usuario",tmp:"Contraseña temporal (mín. 8)",ok:"Guardado",ro:"Solo lectura (otra franquicia)",lig:"Conectado",papeis:{gestor:"Gestor",admin:"Admin",medico:"Médico",administrativo:"Administrativo"},redef:"Nueva contraseña",carreg:"Cargando…",frq:"Franquicias",novaFr:"Nueva franquicia",pais:"País (código, ej.: BR)",moeda:"Moneda",idioma:"Idioma del sistema",ativa:"Activa",criarFr:"Crear franquicia",guardarFr:"Guardar",inativa:"(inactiva)"},
+ en:{t:"Sign in",email:"Email",senha:"Password",entrar:"Sign in",esq:"Forgot password",env:"We sent you a link to reset your password.",nova:"New password",guardar:"Save password",erro:"Invalid email or password.",sem:"This user has no access to any branch.",sair:"Sign out",todas:"All branches",util:"Users",fechar:"Close",nome:"Name",papel:"Role",fr:"Branch",ativo:"Active",criar:"Create user",tmp:"Temporary password (min. 8)",ok:"Saved",ro:"Read only (other branch)",lig:"Connected",papeis:{gestor:"Manager",admin:"Admin",medico:"Doctor",administrativo:"Staff"},redef:"New password",carreg:"Loading…",frq:"Branches",novaFr:"New branch",pais:"Country (code, e.g. BR)",moeda:"Currency",idioma:"System language",ativa:"Active",criarFr:"Create branch",guardarFr:"Save",inativa:"(inactive)"}
 }[BUILD_LANG];
 const NAV_OCULTA={medico:["financeiro","indicacoes"],administrativo:[]};
 const sb=supabase.createClient(SB_URL,SB_KEY);
@@ -1001,17 +1001,40 @@ function frBar(){
   const foot=$("#conn");const me=FR.me,fr=frById(me.franquia_id);
   let bar=$("#frbar");if(!bar){bar=document.createElement("div");bar.id="frbar";bar.className="frbar";foot.after(bar)}
   const sede=fr?.sede;
-  bar.innerHTML=`${sede?`<select id="frSel" aria-label="${TX.fr}">${FR.list.map(f=>`<option value="${f.id}"${f.id===FR.filtro?" selected":""}>${esc(f.nome)}</option>`).join("")}<option value=""${!FR.filtro?" selected":""}>${TX.todas}</option></select>`:`<div class="foot">${esc(fr?.nome||"")}</div>`}
+  bar.innerHTML=`${sede?`<select id="frSel" aria-label="${TX.fr}">${FR.list.map(f=>`<option value="${f.id}"${f.id===FR.filtro?" selected":""}>${esc(f.nome)}${f.ativa===false?" "+TX.inativa:""}</option>`).join("")}<option value=""${!FR.filtro?" selected":""}>${TX.todas}</option></select>`:`<div class="foot">${esc(fr?.nome||"")}</div>`}
   <div class="foot">${esc(me.nome||me.email||"")} · ${TX.papeis[me.papel]||me.papel}</div>
-  ${["gestor","admin"].includes(me.papel)?`<button type="button" id="uBtn">${TX.util}</button>`:""}<button type="button" id="sairBtn">${TX.sair}</button>`;
+  ${sede&&["gestor","admin"].includes(me.papel)?`<button type="button" id="fBtn">${TX.frq}</button>`:""}${["gestor","admin"].includes(me.papel)?`<button type="button" id="uBtn">${TX.util}</button>`:""}<button type="button" id="sairBtn">${TX.sair}</button>`;
   if(sede)$("#frSel").onchange=e=>{const v=e.target.value;try{sessionStorage.setItem("frFiltro",v||"todas")}catch(_){}const f=frById(v||FR.me.franquia_id);const alvo=LANG_FILE[f?.idioma||"pt"];if(alvo!==LANG_FILE[BUILD_LANG]){location.replace(alvo);return}FR.filtro=v||null;aplicaFiltro()};
-  const u=$("#uBtn");if(u)u.onclick=abrirUtil;
+  const u=$("#uBtn");if(u)u.onclick=abrirUtil;const fb=$("#fBtn");if(fb)fb.onclick=abrirFr;
   $("#sairBtn").onclick=async()=>{await sb.auth.signOut();location.reload()};
 }
 function aplicaFiltro(){
   const own=FR.filtro===FR.me.franquia_id;S.canWrite=own;
   const f=frById(FR.filtro||FR.me.franquia_id);FR.moeda=FR.filtro?f?.moeda||FR.moeda:frById(FR.me.franquia_id)?.moeda||FR.moeda;
   $("#conn").textContent=own?TX.lig:TX.ro;S.db.refresh();render();
+}
+
+const MOEDAS=["EUR","USD","BRL","GBP","CHF","MXN","AED"],IDIOMAS={pt:"Português",es:"Español",en:"English"};
+async function recarregaFr(){const{data}=await sb.from("franquias").select("*").order("sede",{ascending:false});if(data)FR.list=data;frBar()}
+function abrirFr(){
+  let m=$("#umod");if(!m){m=document.createElement("div");m.id="umod";document.body.appendChild(m)}
+  m.hidden=false;
+  const optM=sel=>[...new Set([...MOEDAS,sel].filter(Boolean))].map(c=>`<option${c===sel?" selected":""}>${c}</option>`).join("");
+  const optI=sel=>Object.entries(IDIOMAS).map(([k,v])=>`<option value="${k}"${k===sel?" selected":""}>${v}</option>`).join("");
+  m.innerHTML=`<div class="box"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${TX.frq}</h2><button class="btn" id="uFech">${TX.fechar}</button></div>
+  <table><thead><tr><th>${TX.nome}</th><th>${TX.pais}</th><th>${TX.moeda}</th><th>${TX.idioma}</th><th>${TX.ativa}</th><th></th></tr></thead><tbody>
+  ${FR.list.map(f=>f.sede?`<tr><td>${esc(f.nome)}</td><td>${esc(f.pais||"")}</td><td>${esc(f.moeda||"")}</td><td>${IDIOMAS[f.idioma]||""}</td><td>✓</td><td></td></tr>`:
+  `<tr data-fid="${f.id}"><td><input class="fNome" value="${esc(f.nome)}"></td><td><input class="fPais" value="${esc(f.pais||"")}" maxlength="2" style="width:4em"></td><td><select class="fMoeda">${optM(f.moeda)}</select></td><td><select class="fIdioma">${optI(f.idioma)}</select></td><td><input type="checkbox" class="fAtiva"${f.ativa!==false?" checked":""} style="width:auto"></td><td><button type="button" class="btn fGuardar">${TX.guardarFr}</button></td></tr>`).join("")}</tbody></table>
+  <h3>${TX.novaFr}</h3><form id="fNovo" class="row"><input id="nfNome" placeholder="${TX.nome}" required><input id="nfPais" placeholder="${TX.pais}" maxlength="2" required><select id="nfMoeda">${optM("EUR")}</select><select id="nfIdioma">${optI("pt")}</select><button class="btn gold">${TX.criarFr}</button></form><div class="msg" id="uMsg"></div></div>`;
+  const msg=t=>$("#uMsg").textContent=t;
+  $("#uFech").onclick=()=>m.hidden=true;
+  m.querySelectorAll("tr[data-fid]").forEach(tr=>{tr.querySelector(".fGuardar").onclick=async()=>{
+    const row={nome:tr.querySelector(".fNome").value.trim(),pais:tr.querySelector(".fPais").value.trim().toUpperCase(),moeda:tr.querySelector(".fMoeda").value,idioma:tr.querySelector(".fIdioma").value,ativa:tr.querySelector(".fAtiva").checked};
+    if(!row.nome){msg(TX.nome+"?");return}
+    const{error}=await sb.from("franquias").update(row).eq("id",tr.dataset.fid);if(error){msg(error.message);return}await recarregaFr();msg(TX.ok)}});
+  $("#fNovo").onsubmit=async e=>{e.preventDefault();
+    const row={nome:$("#nfNome").value.trim(),pais:$("#nfPais").value.trim().toUpperCase(),moeda:$("#nfMoeda").value,idioma:$("#nfIdioma").value,sede:false};
+    const{error}=await sb.from("franquias").insert(row);if(error){msg(error.message);return}await recarregaFr();abrirFr();$("#uMsg").textContent=TX.ok};
 }
 
 async function fnUtil(body){const{data,error}=await sb.functions.invoke("utilizadores",{body});if(error){let m=error.message;try{m=(await error.context.json()).erro||m}catch(_){}throw new Error(m)}return data}
