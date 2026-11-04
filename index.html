@@ -1027,6 +1027,7 @@ function abrirFr(){
   <table><thead><tr><th>${TX.nome}</th><th>${TX.pais}</th><th>${TX.moeda}</th><th>${TX.idioma}</th><th>${TX.ativa}</th><th></th></tr></thead><tbody>
   ${FR.list.map(f=>f.sede?`<tr><td>${esc(f.nome)}</td><td>${esc(f.pais||"")}</td><td>${esc(f.moeda||"")}</td><td>${IDIOMAS[f.idioma]||""}</td><td>✓</td><td></td></tr>`:
   `<tr data-fid="${f.id}"><td><input class="fNome" value="${esc(f.nome)}"></td><td><input class="fPais" value="${esc(f.pais||"")}" maxlength="2" style="width:4em"></td><td><select class="fMoeda">${optM(f.moeda)}</select></td><td><select class="fIdioma">${optI(f.idioma)}</select></td><td><input type="checkbox" class="fAtiva"${f.ativa!==false?" checked":""} style="width:auto"></td><td><button type="button" class="btn fGuardar">${TX.guardarFr}</button></td></tr>`).join("")}</tbody></table>
+  <h3>Importar dados para ${esc(frById(FR.me.franquia_id)?.nome||"")}</h3><p class="foot" style="margin:0 0 6px">Ficheiro JSON com pacientes e registos (exportação do sistema antigo). Registos que já existam são ignorados.</p><div class="row"><input type="file" id="impFile" accept=".json,application/json"><button type="button" class="btn" id="impBtn">Importar</button></div>
   <h3>${TX.novaFr}</h3><form id="fNovo" class="row"><input id="nfNome" placeholder="${TX.nome}" required><input id="nfPais" placeholder="${TX.pais}" maxlength="2" required><select id="nfMoeda">${optM("EUR")}</select><select id="nfIdioma">${optI("pt")}</select><button class="btn gold">${TX.criarFr}</button></form><div class="msg" id="uMsg"></div></div>`;
   const msg=t=>$("#uMsg").textContent=t;
   $("#uFech").onclick=()=>m.hidden=true;
@@ -1034,6 +1035,14 @@ function abrirFr(){
     const row={nome:tr.querySelector(".fNome").value.trim(),pais:tr.querySelector(".fPais").value.trim().toUpperCase(),moeda:tr.querySelector(".fMoeda").value,idioma:tr.querySelector(".fIdioma").value,ativa:tr.querySelector(".fAtiva").checked};
     if(!row.nome){msg(TX.nome+"?");return}
     const{error}=await sb.from("franquias").update(row).eq("id",tr.dataset.fid);if(error){msg(error.message);return}await recarregaFr();msg(TX.ok)}});
+  $("#impBtn").onclick=async()=>{const f=$("#impFile").files[0];if(!f){msg("Escolha o ficheiro.");return}
+    try{const j=JSON.parse(await f.text());const fr=FR.me.franquia_id;
+      const P=(j.pacientes||[]).map(r=>({id:r.id,franquia_id:fr,dados:r.data||r.dados,criado_em:(r.data||r.dados)?.criadoEm||new Date().toISOString()}));
+      const ids=new Set(P.map(r=>r.id));
+      const E=(j.eventos||[]).map(r=>{const d=r.data||r.dados;return{id:r.id,franquia_id:fr,paciente_id:d.pacienteId,tipo:d.tipo,dados:d,criado_em:d.criadoEm||new Date().toISOString()}}).filter(r=>ids.has(r.paciente_id)||S.db.all("pacientes").some(x=>x.id===r.paciente_id));
+      const ins=async(t,rows)=>{for(let i=0;i<rows.length;i+=200){msg(`${t}: ${Math.min(i+200,rows.length)}/${rows.length}…`);const{error}=await sb.from(t).upsert(rows.slice(i,i+200),{onConflict:"id",ignoreDuplicates:true});if(error)throw error}};
+      await ins("pacientes",P);await ins("eventos",E);
+      msg(`Importados ${P.length} pacientes e ${E.length} registos. A recarregar…`);setTimeout(()=>location.reload(),1500)}catch(er){msg("Erro: "+er.message)}};
   $("#fNovo").onsubmit=async e=>{e.preventDefault();
     const row={nome:$("#nfNome").value.trim(),pais:$("#nfPais").value.trim().toUpperCase(),moeda:$("#nfMoeda").value,idioma:$("#nfIdioma").value,sede:false};
     const{error}=await sb.from("franquias").insert(row);if(error){msg(error.message);return}await recarregaFr();abrirFr();$("#uMsg").textContent=TX.ok};
