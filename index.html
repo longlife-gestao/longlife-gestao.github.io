@@ -948,6 +948,8 @@ const NAV_OCULTA={medico:["financeiro","indicacoes"],administrativo:[]};
 const sb=supabase.createClient(SB_URL,SB_KEY);
 const FR={me:null,list:[],filtro:null,moeda:BUILD_LANG==="en"?"USD":"EUR"};
 const frById=id=>FR.list.find(f=>f.id===id);
+const souMulti=()=>{const f=frById(FR.me?.franquia_id);return !!(f&&(f.sede||f.master))};
+const ordFr=l=>{const me=FR.me?.franquia_id;return (l||[]).slice().sort((a,b)=>(b.id===me)-(a.id===me)||(b.sede-a.sede)||(a.nome||"").localeCompare(b.nome||""))};
 
 function mkDb(){
   const cache={pacientes:new Map(),eventos:new Map()},subs=[];let pend=false;
@@ -1002,7 +1004,7 @@ function showLogin(modo){
 function frBar(){
   const foot=$("#conn");const me=FR.me,fr=frById(me.franquia_id);
   let bar=$("#frbar");if(!bar){bar=document.createElement("div");bar.id="frbar";bar.className="frbar";foot.after(bar)}
-  const sede=fr?.sede;
+  const sede=souMulti();
   bar.innerHTML=`${sede?`<select id="frSel" aria-label="${TX.fr}">${FR.list.map(f=>`<option value="${f.id}"${f.id===FR.filtro?" selected":""}>${esc(f.nome)}${f.ativa===false?" "+TX.inativa:""}</option>`).join("")}<option value=""${!FR.filtro?" selected":""}>${TX.todas}</option></select>`:`<div class="foot">${esc(fr?.nome||"")}</div>`}
   <div class="foot">${esc(me.nome||me.email||"")} · ${TX.papeis[me.papel]||me.papel}</div>
   ${sede&&["gestor","admin"].includes(me.papel)?`<button type="button" id="fBtn">${TX.frq}</button>`:""}${["gestor","admin"].includes(me.papel)?`<button type="button" id="uBtn">${TX.util}</button>`:""}<button type="button" id="sairBtn">${TX.sair}</button>`;
@@ -1017,25 +1019,33 @@ function aplicaFiltro(){
 }
 
 const MOEDAS=["EUR","USD","BRL","GBP","CHF","MXN","AED"],IDIOMAS={pt:"Português",es:"Español",en:"English"};
-async function recarregaFr(){const{data}=await sb.from("franquias").select("*").order("sede",{ascending:false});if(data)FR.list=data;frBar()}
-function abrirFr(){
+async function recarregaFr(){const{data}=await sb.from("franquias").select("*");if(data)FR.list=ordFr(data);frBar()}
+async function abrirFr(){
   let m=$("#umod");if(!m){m=document.createElement("div");m.id="umod";document.body.appendChild(m)}
   m.hidden=false;
+  const own=FR.me.franquia_id,isSede=!!frById(own)?.sede;
+  let acs=[];if(isSede){const{data}=await sb.from("franquia_acessos").select("*");acs=data||[]}
+  const editavel=f=>!f.sede&&f.id!==own&&(isSede||f.criada_por===own)||(isSede&&!f.sede);
+  const masters=FR.list.filter(f=>f.master&&!f.sede);
   const optM=sel=>[...new Set([...MOEDAS,sel].filter(Boolean))].map(c=>`<option${c===sel?" selected":""}>${c}</option>`).join("");
   const optI=sel=>Object.entries(IDIOMAS).map(([k,v])=>`<option value="${k}"${k===sel?" selected":""}>${v}</option>`).join("");
   m.innerHTML=`<div class="box"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${TX.frq}</h2><button class="btn" id="uFech">${TX.fechar}</button></div>
-  <table><thead><tr><th>${TX.nome}</th><th>${TX.pais}</th><th>${TX.moeda}</th><th>${TX.idioma}</th><th>${TX.ativa}</th><th></th></tr></thead><tbody>
-  ${FR.list.map(f=>f.sede?`<tr><td>${esc(f.nome)}</td><td>${esc(f.pais||"")}</td><td>${esc(f.moeda||"")}</td><td>${IDIOMAS[f.idioma]||""}</td><td>✓</td><td></td></tr>`:
-  `<tr data-fid="${f.id}"><td><input class="fNome" value="${esc(f.nome)}"></td><td><input class="fPais" value="${esc(f.pais||"")}" maxlength="2" style="width:4em"></td><td><select class="fMoeda">${optM(f.moeda)}</select></td><td><select class="fIdioma">${optI(f.idioma)}</select></td><td><input type="checkbox" class="fAtiva"${f.ativa!==false?" checked":""} style="width:auto"></td><td><button type="button" class="btn fGuardar">${TX.guardarFr}</button></td></tr>`).join("")}</tbody></table>
-  <h3>Importar dados para ${esc(frById(FR.me.franquia_id)?.nome||"")}</h3><p class="foot" style="margin:0 0 6px">Ficheiro JSON com pacientes e registos (exportação do sistema antigo). Registos que já existam são ignorados.</p><div class="row"><input type="file" id="impFile" accept=".json,application/json"><button type="button" class="btn" id="impBtn">Importar</button></div>
+  <table><thead><tr><th>${TX.nome}</th><th>${TX.pais}</th><th>${TX.moeda}</th><th>${TX.idioma}</th><th>${TX.ativa}</th>${isSede?`<th>${RX.master}</th>`:""}<th></th></tr></thead><tbody>
+  ${FR.list.map(f=>!editavel(f)?`<tr><td>${esc(f.nome)}</td><td>${esc(f.pais||"")}</td><td>${esc(f.moeda||"")}</td><td>${IDIOMAS[f.idioma]||""}</td><td>${f.ativa!==false?"✓":"—"}</td>${isSede?`<td>${f.master?"✓":""}</td>`:""}<td></td></tr>`:
+  `<tr data-fid="${f.id}"><td><input class="fNome" value="${esc(f.nome)}"></td><td><input class="fPais" value="${esc(f.pais||"")}" maxlength="2" style="width:4em"></td><td><select class="fMoeda">${optM(f.moeda)}</select></td><td><select class="fIdioma">${optI(f.idioma)}</select></td><td><input type="checkbox" class="fAtiva"${f.ativa!==false?" checked":""} style="width:auto"></td>${isSede?`<td><input type="checkbox" class="fMaster"${f.master?" checked":""} style="width:auto"></td>`:""}<td><button type="button" class="btn fGuardar">${TX.guardarFr}</button></td></tr>`).join("")}</tbody></table>
+  ${isSede&&masters.length?`<h3>${RX.acs}</h3><p class="foot" style="margin:0 0 6px">${RX.acsd}</p>${masters.map(ms=>`<div style="margin:0 0 10px"><b>${esc(ms.nome)}</b><div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:4px">${FR.list.filter(f=>!f.sede&&f.id!==ms.id).map(f=>`<label style="display:inline-flex;gap:6px;align-items:center;font-size:.9rem"><input type="checkbox" class="fAc" data-m="${ms.id}" data-f="${f.id}"${acs.some(a=>a.master_id===ms.id&&a.franquia_id===f.id)?" checked":""} style="width:auto">${esc(f.nome)}</label>`).join("")}</div></div>`).join("")}`:""}
+  <h3>${RX.imp} ${esc(frById(FR.me.franquia_id)?.nome||"")}</h3><p class="foot" style="margin:0 0 6px">${RX.impd}</p><div class="row"><input type="file" id="impFile" accept=".json,application/json"><button type="button" class="btn" id="impBtn">${RX.impb}</button></div>
   <h3>${TX.novaFr}</h3><form id="fNovo" class="row"><input id="nfNome" placeholder="${TX.nome}" required><input id="nfPais" placeholder="${TX.pais}" maxlength="2" required><select id="nfMoeda">${optM("EUR")}</select><select id="nfIdioma">${optI("pt")}</select><button class="btn gold">${TX.criarFr}</button></form><div class="msg" id="uMsg"></div></div>`;
   const msg=t=>$("#uMsg").textContent=t;
   $("#uFech").onclick=()=>m.hidden=true;
   m.querySelectorAll("tr[data-fid]").forEach(tr=>{tr.querySelector(".fGuardar").onclick=async()=>{
-    const row={nome:tr.querySelector(".fNome").value.trim(),pais:tr.querySelector(".fPais").value.trim().toUpperCase(),moeda:tr.querySelector(".fMoeda").value,idioma:tr.querySelector(".fIdioma").value,ativa:tr.querySelector(".fAtiva").checked};
+    const row={nome:tr.querySelector(".fNome").value.trim(),pais:tr.querySelector(".fPais").value.trim().toUpperCase(),moeda:tr.querySelector(".fMoeda").value,idioma:tr.querySelector(".fIdioma").value,ativa:tr.querySelector(".fAtiva").checked};const mc=tr.querySelector(".fMaster");if(mc)row.master=mc.checked;
     if(!row.nome){msg(TX.nome+"?");return}
-    const{error}=await sb.from("franquias").update(row).eq("id",tr.dataset.fid);if(error){msg(error.message);return}await recarregaFr();msg(TX.ok)}});
-  $("#impBtn").onclick=async()=>{const f=$("#impFile").files[0];if(!f){msg("Escolha o ficheiro.");return}
+    const{error}=await sb.from("franquias").update(row).eq("id",tr.dataset.fid);if(error){msg(error.message);return}await recarregaFr();if("master" in row)abrirFr();else msg(TX.ok)}});
+  m.querySelectorAll(".fAc").forEach(c=>c.onchange=async()=>{const r={master_id:c.dataset.m,franquia_id:c.dataset.f};
+    const{error}=c.checked?await sb.from("franquia_acessos").insert(r):await sb.from("franquia_acessos").delete().eq("master_id",r.master_id).eq("franquia_id",r.franquia_id);
+    if(error){c.checked=!c.checked;msg(error.message)}else msg(TX.ok)});
+  $("#impBtn").onclick=async()=>{const f=$("#impFile").files[0];if(!f){msg(RX.esc);return}
     try{const j=JSON.parse(await f.text());const fr=FR.me.franquia_id;
       const P=(j.pacientes||[]).map(r=>({id:r.id,franquia_id:fr,dados:r.data||r.dados,criado_em:(r.data||r.dados)?.criadoEm||new Date().toISOString()}));
       const ids=new Set(P.map(r=>r.id));
@@ -1044,17 +1054,18 @@ function abrirFr(){
       await ins("pacientes",P);await ins("eventos",E);
       msg(`Importados ${P.length} pacientes e ${E.length} registos. A recarregar…`);setTimeout(()=>location.reload(),1500)}catch(er){msg("Erro: "+er.message)}};
   $("#fNovo").onsubmit=async e=>{e.preventDefault();
-    const row={nome:$("#nfNome").value.trim(),pais:$("#nfPais").value.trim().toUpperCase(),moeda:$("#nfMoeda").value,idioma:$("#nfIdioma").value,sede:false};
+    const row={nome:$("#nfNome").value.trim(),pais:$("#nfPais").value.trim().toUpperCase(),moeda:$("#nfMoeda").value,idioma:$("#nfIdioma").value,sede:false,criada_por:own};
     const{error}=await sb.from("franquias").insert(row);if(error){msg(error.message);return}await recarregaFr();abrirFr();$("#uMsg").textContent=TX.ok};
 }
 
 /* ---------- painel da rede (só sede) ---------- */
+const RX={"pt": {"fr": "Franquia", "at": "Ativos", "ld": "Leads", "nv": "Novos no mês", "ap": "Aplicações no mês", "rc": "Recebido no mês", "vc": "Vencido", "cs": "Consultas 7 dias", "tot": "Total da rede", "fa": "Franquias ativas", "pa": "Pacientes ativos na rede", "nt": "no total", "apm": "Aplicações em", "rr": "Recebido na rede em", "rede": "Rede de franquias", "g6": "Aplicações por mês (últimos 6 meses)", "apl": "aplicações", "imp": "Importar dados para", "impd": "Ficheiro JSON com pacientes e registos (exportação do sistema antigo). Registos que já existam são ignorados.", "impb": "Importar", "master": "Master", "acs": "Acessos das franquias master", "acsd": "Marque as franquias que cada master pode ver. As que a master criar entram automaticamente; a sede nunca fica visível.", "esc": "Escolha o ficheiro.", "meses": ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"], "loc": "pt-PT"}, "es": {"fr": "Franquicia", "at": "Activos", "ld": "Leads", "nv": "Nuevos en el mes", "ap": "Aplicaciones en el mes", "rc": "Cobrado en el mes", "vc": "Vencido", "cs": "Consultas 7 días", "tot": "Total de la red", "fa": "Franquicias activas", "pa": "Pacientes activos en la red", "nt": "en total", "apm": "Aplicaciones en", "rr": "Cobrado en la red en", "rede": "Red de franquicias", "g6": "Aplicaciones por mes (últimos 6 meses)", "apl": "aplicaciones", "imp": "Importar datos a", "impd": "Archivo JSON con pacientes y registros. Los registros que ya existan se ignoran.", "impb": "Importar", "master": "Master", "acs": "Accesos de las franquicias master", "acsd": "Marca las franquicias que cada master puede ver.", "esc": "Elige el archivo.", "meses": ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"], "loc": "es-ES"}, "en": {"fr": "Branch", "at": "Active", "ld": "Leads", "nv": "New this month", "ap": "Injections this month", "rc": "Received this month", "vc": "Overdue", "cs": "Appointments next 7 days", "tot": "Network total", "fa": "Active branches", "pa": "Active patients in network", "nt": "total", "apm": "Injections in", "rr": "Received in network in", "rede": "Branch network", "g6": "Injections per month (last 6 months)", "apl": "injections", "imp": "Import data into", "impd": "JSON file with patients and records. Records that already exist are skipped.", "impb": "Import", "master": "Master", "acs": "Master branch access", "acsd": "Tick the branches each master can see.", "esc": "Choose the file.", "meses": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], "loc": "en-US"}}[BUILD_LANG];
 const REDE_COR=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300"];
 const ATIVO_ST=["Ativo","Activo","Active"],LEAD_ST=["Lead"],AGEND_ST=["Agendada","Programada","Scheduled"];
-const fmtM=(v,c)=>new Intl.NumberFormat("pt-PT",{style:"currency",currency:c||"EUR",maximumFractionDigits:0}).format(+v||0);
-const MESES_CURTOS=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const fmtM=(v,c)=>new Intl.NumberFormat(RX.loc,{style:"currency",currency:c||"EUR",maximumFractionDigits:0}).format(+v||0);
+const MESES_CURTOS=RX.meses;
 function painelRede(){
-  const me=FR.me;if(!me||!frById(me.franquia_id)?.sede||!S.db?.all)return "";
+  const me=FR.me;if(!me||!souMulti()||!S.db?.all)return "";
   if(FR.filtro&&FR.filtro!==me.franquia_id)return "";
   const frs=FR.list.filter(f=>f.ativa!==false);if(frs.length<2)return "";
   const P=S.db.all("pacientes"),E=S.db.all("eventos"),hj=today(),mes=hj.slice(0,7),em7=addDays(hj,7);
@@ -1083,26 +1094,26 @@ function painelRede(){
   const max=Math.max(4,...linhas.flatMap(l=>l.aplSerie));const nice=Math.ceil(max/4)*4;
   const gw=iw/meses.length,bw=Math.max(4,Math.min(18,(gw-12)/linhas.length-2));
   const y=v=>pt+ih-(v/nice)*ih;
-  let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Aplicações por mês e franquia" style="width:100%;height:auto;display:block">`;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${RX.g6}" style="width:100%;height:auto;display:block">`;
   for(let g=0;g<=4;g++){const v=nice*g/4;svg+=`<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`}
   meses.forEach((m,i)=>{const gx=pl+i*gw+(gw-(bw+2)*linhas.length+2)/2;
     linhas.forEach((l,j)=>{const v=l.aplSerie[i],x=gx+j*(bw+2),yy=y(v),h=Math.max(0,pt+ih-yy);
-      svg+=`<rect x="${x}" y="${v?yy:pt+ih-1}" width="${bw}" height="${v?h:1}" rx="${Math.min(4,bw/2)}" fill="${l.cor}"${v?"":` opacity=".35"`}><title>${esc(l.f.nome)} · ${MESES_CURTOS[+m.slice(5)-1]}/${m.slice(0,4)}: ${v} aplicações</title></rect>`});
+      svg+=`<rect x="${x}" y="${v?yy:pt+ih-1}" width="${bw}" height="${v?h:1}" rx="${Math.min(4,bw/2)}" fill="${l.cor}"${v?"":` opacity=".35"`}><title>${esc(l.f.nome)} · ${MESES_CURTOS[+m.slice(5)-1]}/${m.slice(0,4)}: ${v} ${RX.apl}</title></rect>`});
     svg+=`<text x="${pl+i*gw+gw/2}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--muted)">${MESES_CURTOS[+m.slice(5)-1]}</text>`});
   svg+="</svg>";
   const leg=linhas.map(l=>`<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:.85rem"><i style="width:10px;height:10px;border-radius:3px;background:${l.cor};display:inline-block"></i>${esc(l.f.nome)}</span>`).join("");
   const td='style="text-align:right;font-variant-numeric:tabular-nums"';
-  const tab=`<div style="overflow-x:auto"><table class="rede"><thead><tr><th>Franquia</th><th ${td}>Ativos</th><th ${td}>Leads</th><th ${td}>Novos no mês</th><th ${td}>Aplicações no mês</th><th ${td}>Recebido no mês</th><th ${td}>Vencido</th><th ${td}>Consultas 7 dias</th></tr></thead><tbody>
+  const tab=`<div style="overflow-x:auto"><table class="rede"><thead><tr><th>${RX.fr}</th><th ${td}>${RX.at}</th><th ${td}>${RX.ld}</th><th ${td}>${RX.nv}</th><th ${td}>${RX.ap}</th><th ${td}>${RX.rc}</th><th ${td}>${RX.vc}</th><th ${td}>${RX.cs}</th></tr></thead><tbody>
   ${linhas.map(l=>`<tr><td><button type="button" class="linkfr" data-fr="${l.f.id}"><i style="width:10px;height:10px;border-radius:3px;background:${l.cor};display:inline-block;margin-right:6px"></i>${esc(l.f.nome)}</button></td><td ${td}>${l.ativos}</td><td ${td}>${l.leads}</td><td ${td}>${l.novos}</td><td ${td}>${l.aplMes}</td><td ${td}>${fmtM(l.receita,l.f.moeda)}</td><td ${td}>${l.vencN?`<span class="pill p-bad">${fmtM(l.vencV,l.f.moeda)} · ${l.vencN}</span>`:fmtM(0,l.f.moeda)}</td><td ${td}>${l.cons}</td></tr>`).join("")}
-  <tr style="font-weight:600"><td>Total da rede</td><td ${td}>${soma("ativos")}</td><td ${td}>${soma("leads")}</td><td ${td}>${soma("novos")}</td><td ${td}>${soma("aplMes")}</td><td ${td}>${porMoeda("receita")}</td><td ${td}>${porMoeda("vencV")}</td><td ${td}>${soma("cons")}</td></tr></tbody></table></div>`;
+  <tr style="font-weight:600"><td>${RX.tot}</td><td ${td}>${soma("ativos")}</td><td ${td}>${soma("leads")}</td><td ${td}>${soma("novos")}</td><td ${td}>${soma("aplMes")}</td><td ${td}>${porMoeda("receita")}</td><td ${td}>${porMoeda("vencV")}</td><td ${td}>${soma("cons")}</td></tr></tbody></table></div>`;
   return `<div class="kpis">
-    <div class="kpi"><b>${frs.length}</b><span>Franquias ativas</span></div>
-    <div class="kpi"><b>${soma("ativos")}</b><span>Pacientes ativos na rede · ${soma("total")} no total</span></div>
-    <div class="kpi"><b>${soma("aplMes")}</b><span>Aplicações em ${nomeMes}</span></div>
-    <div class="kpi"><b style="font-size:1.15rem">${porMoeda("receita")}</b><span>Recebido na rede em ${nomeMes}</span></div>
+    <div class="kpi"><b>${frs.length}</b><span>${RX.fa}</span></div>
+    <div class="kpi"><b>${soma("ativos")}</b><span>${RX.pa} · ${soma("total")} ${RX.nt}</span></div>
+    <div class="kpi"><b>${soma("aplMes")}</b><span>${RX.apm} ${nomeMes}</span></div>
+    <div class="kpi"><b style="font-size:1.15rem">${porMoeda("receita")}</b><span>${RX.rr} ${nomeMes}</span></div>
   </div>
-  <div class="panel" style="margin-bottom:20px"><h2>Rede de franquias · ${nomeMes}</h2>${tab}
-  <h3 style="margin:18px 0 6px;font-size:.95rem">Aplicações por mês (últimos 6 meses)</h3><div>${leg}</div>${svg}</div>
+  <div class="panel" style="margin-bottom:20px"><h2>${RX.rede} · ${nomeMes}</h2>${tab}
+  <h3 style="margin:18px 0 6px;font-size:.95rem">${RX.g6}</h3><div>${leg}</div>${svg}</div>
   <h2 style="margin:6px 0 12px">${esc(frById(me.franquia_id)?.nome||"")}</h2>`;
 }
 document.addEventListener("click",e=>{const b=e.target.closest(".linkfr");if(!b)return;const s=$("#frSel");if(!s)return;s.value=b.dataset.fr;s.dispatchEvent(new Event("change"))});
@@ -1111,7 +1122,7 @@ async function fnUtil(body){const{data,error}=await sb.functions.invoke("utiliza
 async function abrirUtil(){
   let m=$("#umod");if(!m){m=document.createElement("div");m.id="umod";document.body.appendChild(m)}
   m.hidden=false;m.innerHTML=`<div class="box"><p>${TX.carreg}</p></div>`;
-  const sede=frById(FR.me.franquia_id)?.sede;
+  const sede=souMulti();
   const papeis=Object.keys(TX.papeis).filter(p=>p!=="gestor"||FR.me.papel==="gestor");
   let lista=[];try{lista=(await fnUtil({acao:"listar"})).utilizadores||[]}catch(e){m.innerHTML=`<div class="box"><p>${esc(e.message)}</p><button class="btn" id="uFech">${TX.fechar}</button></div>`;$("#uFech").onclick=()=>m.hidden=true;return}
   const optP=sel=>Object.keys(TX.papeis).map(p=>`<option value="${p}"${p===sel?" selected":""}${papeis.includes(p)?"":" disabled"}>${TX.papeis[p]}</option>`).join("");
@@ -1142,9 +1153,9 @@ async function abrirUtil(){
   const uid=session.user.id;
   const[{data:me},{data:frs}]=await Promise.all([sb.from("perfis").select("*").eq("user_id",uid).maybeSingle(),sb.from("franquias").select("*").order("sede",{ascending:false})]);
   if(!me||!me.ativo){S.err=TX.sem;$("#conn").textContent="";render();showLogin();$("#aMsg").textContent=TX.sem;await sb.auth.signOut();return}
-  FR.me={...me,email:session.user.email};FR.list=frs||[];FR.filtro=me.franquia_id;
+  FR.me={...me,email:session.user.email};FR.list=ordFr(frs);FR.filtro=me.franquia_id;
   const fr=frById(me.franquia_id);FR.moeda=fr?.moeda||FR.moeda;
-  if(fr?.sede){let sv=null;try{sv=sessionStorage.getItem("frFiltro")}catch(_){}if(sv==="todas")FR.filtro=null;else if(sv&&frById(sv))FR.filtro=sv}
+  if(fr?.sede||fr?.master){let sv=null;try{sv=sessionStorage.getItem("frFiltro")}catch(_){}if(sv==="todas")FR.filtro=null;else if(sv&&frById(sv))FR.filtro=sv}
   const vis=frById(FR.filtro||me.franquia_id);
   const alvo=LANG_FILE[vis?.idioma||"pt"];if(alvo!==LANG_FILE[BUILD_LANG]){location.replace(alvo);return}
   (NAV_OCULTA[me.papel]||[]).forEach(v=>{const b=document.querySelector(`.nav[data-view="${v}"]`);if(b)b.hidden=true});
