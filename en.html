@@ -334,6 +334,7 @@ function render(){
   if(!S.ready){m.innerHTML=`<p class="empty">${S.err||"Loading…"}</p>`;return}
   m.innerHTML=({painel:vPainel,funil:vFunil,pacientes:vPacientes,consultas:vConsultas,aplicacoes:vAplicacoes,financeiro:vFinanceiro,indicacoes:vIndicacoes,whatsapp:vWhats,relatorios:vRelatorios})[S.view]();
   if(S.view==="pacientes"){const q=$("#q");if(q&&document.activeElement!==q&&S.qFocus){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
+  if(S.view==="pacientes"&&S.scrollFicha){S.scrollFicha=false;const fb=$("#fichaBox");if(fb&&fb.getBoundingClientRect().top>120)fb.scrollIntoView({block:"start",behavior:"smooth"})}
 }
 function header(t,sub,btn){return `<div class="top"><div><h1>${t}</h1>${sub?`<p>${sub}</p>`:""}</div>${btn||""}</div>`}
 const newBtn=()=>S.canWrite?`<button class="btn gold" data-act="novoPaciente">+ New patient</button>`:"";
@@ -390,7 +391,7 @@ function vPacientes(){
     <div class="list"><input id="q" placeholder="Search by name or phone" value="${esc(S.q)}" aria-label="Search">
       ${list.length?list.map(x=>{const i=info(x);return `<button class="pi" data-sel="${x.id}" aria-current="${x.id===S.sel}"><span class="t"><span class="nm">${esc(x.nome)}</span><span class="bd"><span class="pill p-${i.st}">${i.stT}</span>${x.alertaClinico?` <span class="alerta" title="${esc(x.alertaClinico)}">⚠ Alert</span>`:""}</span></span><span class="s">${!x.status||x.status==="Active"?`Week ${i.semanas} · next ${br(i.prox)}`:esc([x.telefone,x.origem].filter(Boolean).join(" · "))}</span></button>`}).join(""):`<p class="empty">No patients.</p>`}
     </div>
-    <div>${p?ficha(p):`<div class="panel"><p class="empty">Select a patient.</p></div>`}</div>
+    <div id="fichaBox">${p?ficha(p):`<div class="panel"><p class="empty">Select a patient.</p></div>`}</div>
   </div>`;
 }
 
@@ -881,10 +882,10 @@ document.addEventListener("click",async e=>{
   const p=S.pac.find(x=>x.id===S.sel);
   if(t.dataset.view){S.view=t.dataset.view;render();return}
   if(t.hasAttribute("data-close")){closeForm();return}
-  if(t.dataset.sel){S.sel=t.dataset.sel;S.qFocus=false;render();return}
+  if(t.dataset.sel){S.sel=t.dataset.sel;S.qFocus=false;S.scrollFicha=true;render();return}
   if(t.dataset.tab){S.tab=t.dataset.tab;render();return}
-  if(t.dataset.open){S.sel=t.dataset.open;S.view="pacientes";S.tab="aplicacoes";render();return}
-  if(t.dataset.openfin){const[id,tab]=t.dataset.openfin.split("|");S.sel=id;S.view="pacientes";S.tab=tab;render();return}
+  if(t.dataset.open){S.scrollFicha=true;S.sel=t.dataset.open;S.view="pacientes";S.tab="aplicacoes";render();return}
+  if(t.dataset.openfin){const[id,tab]=t.dataset.openfin.split("|");S.scrollFicha=true;S.sel=id;S.view="pacientes";S.tab=tab;render();return}
   if(t.dataset.fin){S.fin=t.dataset.fin;render();return}
   if(t.dataset.adia){S.adia=t.dataset.adia;render();return}
   if(t.dataset.ames){const v=t.dataset.ames,m=S.ames||today().slice(0,7);if(v==="hoje"){S.ames=today().slice(0,7);S.adia=today()}else{S.ames=v==="prev"?mesAdd(m,-1):mesAdd(m,1);S.adia=""}render();return}
