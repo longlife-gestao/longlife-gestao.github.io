@@ -76,7 +76,7 @@ h3{font-size:.8rem;margin:0;text-transform:uppercase;letter-spacing:.1em;color:v
 .row .t{font-weight:600}
 .row .s{color:var(--muted);font-size:.8rem}
 .alerta{display:inline-block;background:#c0392b;color:#fff;border-radius:999px;padding:2px 9px;font-size:.72rem;font-weight:700;white-space:nowrap}
-.alerta-box{background:#fdecea;border:1px solid #c0392b;color:#7a1f16;border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.9rem}
+.alerta-box{white-space:pre-line;line-height:1.55;background:#fdecea;border:1px solid #c0392b;color:#7a1f16;border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.9rem}
 @media (prefers-color-scheme: dark){.alerta-box{background:#3a1a17;color:#ffb4a8}}
 .pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:.72rem;font-weight:700;white-space:nowrap;text-decoration:none}
 .p-ok{background:var(--okbg);color:var(--ok)} .p-warn{background:var(--warnbg);color:var(--warn)} .p-bad{background:var(--badbg);color:var(--bad)} .p-info{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)} .p-mute{background:var(--surface2);color:var(--muted)}
@@ -433,7 +433,7 @@ function ficha(p){
     body=`<p class="note">Messages do not include dose or health data. The button opens WhatsApp with the text ready for ${esc(p.telefone||"the patient's number")}.</p>`+ms.map(([t,m])=>`<div class="panel" style="margin-top:12px"><h2>${t}</h2><div class="msgbox" style="margin:10px 0">${esc(m)}</div>${waButton(p,m,"Open in WhatsApp")}</div>`).join("");
   }else{
     body=`<div class="facts">${[["Phone",p.telefone],["Email",p.email],["Date of birth",br(p.nascimento)],["Language",p.idioma],["Start",br(p.inicio)],["Day and time",[p.dia,p.horario].filter(Boolean).join(" ")],["Starting weight",num(p.pesoInicial)+" kg"],["Height",num(p.altura,0)+" cm"],["Goal",p.meta?num(p.meta)+" kg":"—"],["Prescriber",p.prescritor],["Stage",p.status||"Active"],["Source",p.origem],["HIPAA consent",p.consentimento?"Yes":"No"]].map(([k,v])=>`<div class="fact"><span>${k}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
-    ${p.obs?`<p style="margin-top:12px">${esc(p.obs)}</p>`:""}
+    ${p.obs?`<p style="margin-top:12px;white-space:pre-line;line-height:1.55">${esc(p.obs)}</p>`:""}
     ${w?`<div class="acts" style="justify-content:flex-start"><button class="btn sm" data-act="editarPaciente">Edit details</button><button class="btn ghost sm" data-act="excluirPaciente">Delete patient</button></div>`:""}`;
   }
   const imc=p.altura&&i.pesoAtual?i.pesoAtual/((p.altura/100)**2):null;
