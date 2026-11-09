@@ -265,7 +265,16 @@ function parcelasPlano(p){const r=[];if(!temPlano(p))return r;const n=+p.planoPa
   for(let k=0;k<(n||500);k++){const d=vencPlano(p,k);if(!n&&d>lim)break;r.push({d,k})}return r}
 const IND_VALOR=50;// abatimento por indicação, só na parcela do mês
 const r2=n=>Math.round(n*100)/100;
-const indicacoesMes=(pid,mes)=>S.ev.filter(e=>e.tipo==="indicacao"&&e.pacienteId===pid&&e.mes===mes);
+const indicacoesMes=(pid,mes)=>S.ev.filter(e=>e.tipo==="indicacao"&&e.status!=="pendente"&&e.pacienteId===pid&&e.mes===mes);
+const nmI=t=>String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
+const indicadoAtivo=e=>{const q=(e.indicadoId&&S.pac.find(x=>x.id===e.indicadoId))||S.pac.find(x=>nmI(x.nome)===nmI(e.indicadoNome));return q&&q.status==="Ativo"?q:null};
+// parcela em aberto onde o abatimento entra: a do mês atual; se já estiver paga, a próxima em aberto
+function parcelaAlvo(pid){const hoje=today().slice(0,7);return S.ev.filter(e=>e.pacienteId===pid&&e.tipo==="pagamento"&&e.plano&&!e.saldoDe&&(e.vencimento||"").slice(0,7)>=hoje&&(e.status!=="pago"||e.metodo==="Desconto por indicações")).sort((a,b)=>a.vencimento.localeCompare(b.vencimento)).find(e=>{const base=+e.valorBase||+e.valor;return base-(+e.desconto||0)>0})}
+async function aplicarIndicacao(e){const q=indicadoAtivo(e);if(!q)return false;const par=parcelaAlvo(e.pacienteId);if(!par)return false;
+  const base=+par.valorBase||+par.valor,atual=+par.desconto||0,aplicado=Math.min(IND_VALOR,r2(base-atual)),mes=par.vencimento.slice(0,7);
+  await wr(()=>S.db.doc("eventos/"+e.id).update({status:"aplicada",aplicado,mes,mesRef:e.mesRef||e.mes||mes,pagamentoId:par.id,indicadoId:q.id,aplicadoEm:today()}));
+  await recalcParcela({...par,valorBase:base},Math.round((atual+aplicado)/IND_VALOR*1e6)/1e6);return true}
+async function syncIndicacoes(){let n=0;for(const e of S.ev.filter(x=>x.tipo==="indicacao"&&x.status==="pendente")){try{if(await aplicarIndicacao(e))n++}catch(_){}}return n}
 function descontoPlano(pid,venc,base){const n=indicacoesMes(pid,venc.slice(0,7)).length,desc=Math.min(base,n*IND_VALOR);return{n,desc,valor:r2(base-desc)}}
 const parcelaDoMes=(pid,mes)=>S.ev.filter(e=>e.pacienteId===pid&&e.tipo==="pagamento"&&e.plano&&!e.saldoDe&&(e.vencimento||"").startsWith(mes)).sort((a,b)=>a.vencimento.localeCompare(b.vencimento))[0];
 const valTxt=e=>eur(e.valor)+(+e.desconto?` <small style="color:var(--ok)">−${eur(e.desconto)} indicações</small>`:"");
@@ -542,7 +551,7 @@ const TL={
   dose:["Dose",e=>`<b>${esc(e.dose)}</b> · ${esc(e.tipoDose||"")}${e.prescritor?" · "+esc(e.prescritor):""}`],
   medida:["Medida",e=>`${e.peso?num(e.peso)+" kg":""}${e.cintura?" · cintura "+num(e.cintura)+" cm":""}${e.nota?" · "+esc(e.nota):""}`],
   pagamento:["Financeiro",e=>`${eur(e.valor)} · ${esc(e.descricao||"")} · ${stPag(e)[1]}`],
-  indicacao:["Indicação",e=>`Indicou <b>${esc(e.indicadoNome||"")}</b> · abatimento de ${eur(e.aplicado)} na parcela de ${esc(mesTxt(e.mes||""))}`]
+  indicacao:["Indicação",e=>e.status==="pendente"?`Indicou <b>${esc(e.indicadoNome||"")}</b> · abatimento de ${eur(IND_VALOR)} aguarda o indicado ficar Ativo`:`Indicou <b>${esc(e.indicadoNome||"")}</b> · abatimento de ${eur(e.aplicado)} na parcela de ${esc(mesTxt(e.mes||""))}`]
 };
 const stCon=x=>{const s=x.status||"Agendada";return s==="Realizada"?["ok",s]:s==="Faltou"?["bad",s]:s==="Cancelada"?["mute",s]:x.data<today()?["warn","Por confirmar"]:["info",s]};
 const pillCon=x=>{const[c,t]=stCon(x);return `<span class="pill p-${c}">${t}</span>`};
@@ -672,7 +681,7 @@ function vIndicacoes(){
   const meses=[...new Set(todas.map(e=>e.mes))].sort().reverse();
   // parcela do mês de cada paciente com plano ativo
   const linhas=ativos().filter(temPlano).map(p=>{const par=parcelaDoMes(p.id,mes),n=indicacoesMes(p.id,mes).length;return{p,par,n}}).filter(x=>x.par).sort((a,b)=>b.n-a.n||(a.p.nome||"").localeCompare(b.p.nome||""));
-  return header("Programa de indicações",`Cada indicação abate ${eur(IND_VALOR)} só na parcela do mês de quem indicou. No mês seguinte recomeça.`,w?`<button class="btn gold" data-act="indicacaoGeral">+ Registar indicação</button>`:"")+`
+  return header("Programa de indicações",`Cada indicação abate ${eur(IND_VALOR)} da parcela de quem indicou, só quando o indicado fica Ativo. Pode ser registada mesmo com a parcela do mês paga: o abatimento vai para a próxima em aberto.`,w?`<button class="btn gold" data-act="indicacaoGeral">+ Registar indicação</button>`:"")+`
   <div class="kpis">
     <div class="kpi"><b>${doMes.length}</b><span>Indicações em ${esc(mesTxt(mes))}</span></div>
     <div class="kpi"><b>${eur(tot)}</b><span>Abatido nas parcelas do mês</span></div>
@@ -681,7 +690,7 @@ function vIndicacoes(){
   </div>
   <div class="cols">
     <div class="panel"><h2>Parcelas de ${esc(mesTxt(mes))}</h2>${linhas.length?linhas.map(({p,par,n})=>`<div class="row"><div class="grow"><div class="t">${esc(p.nome)}</div><div class="s">Vencimento ${br(par.vencimento)} · ${n} indicaç${n===1?"ão":"ões"}${par.status==="pago"?" · paga":""}</div></div><b>${+par.desconto?`<s style="color:var(--muted);font-weight:400">${eur(par.valorBase)}</s> ${eur(par.valor)}`:eur(par.valor)}</b>${w&&par.status!=="pago"?`<button class="btn ghost sm" data-indpac="${p.id}">+ Indicação</button>`:""}</div>`).join(""):`<p class="empty">Nenhum paciente ativo com plano de pagamento.</p>`}</div>
-    <div class="panel"><h2>Histórico</h2>${todas.length?meses.map(m=>`<div class="s" style="color:var(--muted);margin:10px 0 4px;text-transform:capitalize"><b>${esc(mesTxt(m))}</b></div>`+todas.filter(e=>e.mes===m).map(e=>`<div class="row"><div class="grow"><div class="t">${esc(nome(e.pacienteId))}</div><div class="s">indicou ${esc(e.indicadoNome||"")} · ${br(e.data)}</div></div><b>−${eur(e.aplicado)}</b>${w?`<button class="btn ghost sm" data-delind="${e.id}">Remover</button>`:""}</div>`).join("")).join(""):`<p class="empty">Ainda não há indicações registadas.</p>`}</div>
+    <div class="panel"><h2>Histórico</h2>${todas.length?meses.map(m=>`<div class="s" style="color:var(--muted);margin:10px 0 4px;text-transform:capitalize"><b>${esc(mesTxt(m))}</b></div>`+todas.filter(e=>e.mes===m).map(e=>`<div class="row"><div class="grow"><div class="t">${esc(nome(e.pacienteId))}</div><div class="s">indicou ${esc(e.indicadoNome||"")} · ${br(e.data)}</div></div><b>${e.status==="pendente"?"aguarda ativo":"−"+eur(e.aplicado)}</b>${w?`<button class="btn ghost sm" data-delind="${e.id}">Remover</button>`:""}</div>`).join("")).join(""):`<p class="empty">Ainda não há indicações registadas.</p>`}</div>
   </div>`;
 }
 function blocoIndicacoes(p,w){
@@ -691,13 +700,13 @@ function blocoIndicacoes(p,w){
   return `<div class="panel" style="margin:0 0 12px"><h3 style="margin:0 0 4px">Programa de indicações</h3>
     <p class="s" style="color:var(--muted);margin:0 0 8px">Cada indicação abate ${eur(IND_VALOR)} só na parcela do mês. No mês seguinte as indicações recomeçam. ${doMes.length} indicaç${doMes.length===1?"ão":"ões"} em ${esc(mesTxt(mes))}. ${res}</p>
     ${w?`<div class="acts" style="justify-content:flex-start;margin-bottom:8px"><button class="btn gold sm" data-act="indicacao">+ Registar indicação</button></div>`:""}
-    ${ind.length?tabelaSimples(ind,[["Data",e=>br(e.data)],["Indicado",e=>esc(e.indicadoNome||"")],["Mês",e=>esc(mesTxt(e.mes||""))],["Abatido",e=>eur(e.aplicado)],["",e=>w?`<button class="btn ghost sm" data-delind="${e.id}">Remover</button>`:""]],""):""}</div>`;
+    ${ind.length?tabelaSimples(ind,[["Data",e=>br(e.data)],["Indicado",e=>esc(e.indicadoNome||"")],["Mês",e=>esc(mesTxt(e.mes||""))],["Abatido",e=>e.status==="pendente"?"<span style=\"color:var(--muted)\">aguarda ativo</span>":eur(e.aplicado)],["",e=>w?`<button class="btn ghost sm" data-delind="${e.id}">Remover</button>`:""]],""):""}</div>`;
 }
 function formIndicacao(p0){
   const NAO="Não está cadastrado",ord=(a,b)=>(a.nome||"").localeCompare(b.nome||""),outros=S.pac.filter(x=>!p0||x.id!==p0.id).sort(ord).map(x=>x.nome),comPlano=S.pac.filter(x=>temPlano(x)&&(!x.status||x.status==="Ativo")).sort(ord).map(x=>x.nome);
   openForm("Registar indicação"+(p0?" — "+esc(p0.nome):""),[
     p0?"":field("indicador","Quem indicou (paciente com plano) *","select",comPlano[0]||"",{options:comPlano.length?comPlano:["—"],full:1}),
-    `<p class="note" style="grid-column:1/-1">A indicação abate ${eur(IND_VALOR)} na parcela do plano do mês da data escolhida. Cada pessoa indicada só conta uma vez.</p>`,
+    `<p class="note" style="grid-column:1/-1">O abatimento de ${eur(IND_VALOR)} só entra quando a pessoa indicada estiver com status Ativo. Se a parcela do mês já foi paga, o abatimento vai para a próxima parcela em aberto. Cada pessoa indicada só conta uma vez.</p>`,
     field("indicadoSel","Pessoa indicada (se já cadastrada)","select",NAO,{options:[NAO,...outros],full:1}),
     field("indicadoNome","Ou escreva o nome","text","",{full:1,ph:"Nome de quem foi indicado"}),
     field("data","Data da indicação","date",today())].join(""),
@@ -708,16 +717,17 @@ function formIndicacao(p0){
     const nm=t=>String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();
     const dup=S.ev.find(e=>e.tipo==="indicacao"&&((ind&&e.indicadoId===ind.id)||nm(e.indicadoNome)===nm(nome)));
     if(dup){const q=S.pac.find(x=>x.id===dup.pacienteId);return`${nome} já foi registado como indicação${q?" de "+q.nome:""}. O abatimento só vale uma vez.`}
-    const data=v("data")||today(),mes=data.slice(0,7),par=parcelaDoMes(p.id,mes);
-    if(!par)return`${p.nome} não tem parcela do plano em ${mesTxt(mes)}.`;
-    if(par.status==="pago"&&par.metodo!=="Desconto por indicações")return`A parcela de ${mesTxt(mes)} já está paga. A indicação só abate uma parcela em aberto.`;
-    const base=+par.valorBase||+par.valor,atual=+par.desconto||0;
-    if(base-atual<=0)return`A parcela de ${mesTxt(mes)} já está a zero.`;
-    const aplicado=Math.min(IND_VALOR,r2(base-atual));
-    const antes=indicacoesMes(p.id,mes).length;
-    await addEvento(p.id,"indicacao",{data,mes,indicadoNome:nome,indicadoId:ind?ind.id:"",valor:IND_VALOR,aplicado,pagamentoId:par.id});
-    await recalcParcela({...par,valorBase:base},antes+1);
-    toast(`Indicação registada · parcela de ${mesTxt(mes)} agora ${eur(r2(base-atual-aplicado))}`);
+    const data=v("data")||today(),base0={data,mes:data.slice(0,7),mesRef:data.slice(0,7),indicadoNome:nome,indicadoId:ind?ind.id:"",valor:IND_VALOR};
+    const ev0={...base0,status:"pendente",aplicado:0};
+    // o valor só baixa quando o indicado estiver ativo; a parcela do mês pode já estar paga (entra na próxima em aberto)
+    const q=indicadoAtivo(ev0);
+    if(!q){await addEvento(p.id,"indicacao",ev0);toast(`Indicação registada · aguarda ${nome} ficar Ativo para abater ${eur(IND_VALOR)}`);return}
+    const par=parcelaAlvo(p.id);
+    if(!par){await addEvento(p.id,"indicacao",ev0);toast("Indicação registada · sem parcela em aberto, será abatida quando houver");return}
+    const base=+par.valorBase||+par.valor,atual=+par.desconto||0,aplicado=Math.min(IND_VALOR,r2(base-atual)),mes=par.vencimento.slice(0,7);
+    await addEvento(p.id,"indicacao",{...ev0,status:"aplicada",aplicado,mes,pagamentoId:par.id,indicadoId:q.id,aplicadoEm:today()});
+    await recalcParcela({...par,valorBase:base},Math.round((atual+aplicado)/IND_VALOR*1e6)/1e6);
+    toast(`Indicação aplicada · parcela de ${mesTxt(mes)} agora ${eur(r2(base-atual-aplicado))}`);
   },"Registar");
 }
 function field(id,label,type="text",val="",opts={}){
@@ -900,7 +910,7 @@ document.addEventListener("click",async e=>{
   if(t.dataset.pago){const x=S.ev.find(q=>q.id===t.dataset.pago);x&&formReceber(x);return}
   if(t.dataset.editpag){const x=S.ev.find(q=>q.id===t.dataset.editpag);x&&formPagamento(S.pac.find(q=>q.id===x.pacienteId)||null,x);return}
   if(t.dataset.indpac){const q=S.pac.find(x=>x.id===t.dataset.indpac);q&&formIndicacao(q);return}
-  if(t.dataset.delind){const e=S.ev.find(q=>q.id===t.dataset.delind);if(e)confirmar(`Remover a indicação de ${esc(e.indicadoNome||"")}? O valor da parcela do mês volta a subir ${eur(e.aplicado)}.`,async()=>{const n=indicacoesMes(e.pacienteId,e.mes).length,par=S.ev.find(q=>q.id===e.pagamentoId);await S.db.doc("eventos/"+e.id).delete();if(par)await recalcParcela(par,Math.max(0,n-1));toast("Indicação removida")},"Remover");return}
+  if(t.dataset.delind){const e=S.ev.find(q=>q.id===t.dataset.delind);if(e)confirmar(`Remover a indicação de ${esc(e.indicadoNome||"")}? O valor da parcela do mês volta a subir ${eur(e.aplicado)}.`,async()=>{const n=indicacoesMes(e.pacienteId,e.mes).length,par=e.status==="pendente"?null:S.ev.find(q=>q.id===e.pagamentoId);await S.db.doc("eventos/"+e.id).delete();if(par)await recalcParcela(par,Math.max(0,S.ev.filter(q=>q.id!==e.id&&q.tipo==="indicacao"&&q.status!=="pendente"&&q.pagamentoId===par.id).length));toast("Indicação removida")},"Remover");return}
   if(t.dataset.del){const id=t.dataset.del;confirmar("Apagar este registo? Não pode ser desfeito.",async()=>{await S.db.doc("eventos/"+id).delete();toast("Registo apagado")},"Apagar");return}
   const a=t.dataset.act;if(!a)return;
   if(a==="novoPaciente")formPaciente();
@@ -1169,7 +1179,7 @@ async function abrirUtil(){
   const db=mkDb();S.db=db;S.canWrite=FR.filtro===me.franquia_id;FR.moeda=vis?.moeda||FR.moeda;
   $("#conn").textContent=S.canWrite?TX.lig:TX.ro;frBar();
   let gotP=false;const got={};
-  const ready=()=>{S.ready=gotP&&TIPOS.every(t=>got[t]);if(S.ready&&!S.synced&&S.canWrite&&FR.me.papel!=="medico"){S.synced=true;syncTodos().then(n=>{if(n)toast(n+" ✓")})}if($("#modal").hidden)render()};
+  const ready=()=>{S.ready=gotP&&TIPOS.every(t=>got[t]);if(S.ready&&!S.synced&&S.canWrite&&FR.me.papel!=="medico"){S.synced=true;syncTodos().then(n=>{if(n)toast(n+" ✓")})}if(S.ready&&S.canWrite&&FR.me.papel!=="medico"&&!S.indBusy&&S.ev.some(e=>e.tipo==="indicacao"&&e.status==="pendente"&&indicadoAtivo(e))){S.indBusy=true;syncIndicacoes().then(m=>{if(m)toast(m+" indicação(ões) aplicada(s): indicado ativo")}).finally(()=>{S.indBusy=false})}if($("#modal").hidden)render()};
   db.collection("pacientes").limit(1000).onSnapshot(s=>{S.pac=s.docs.map(d=>({id:d.id,...d.data()}));gotP=true;ready()},er=>{S.err="Erro";render()});
   for(const tp of TIPOS)db.collection("eventos").where("tipo","==",tp).limit(1000).onSnapshot(s=>{S.evBy[tp]=s.docs.map(d=>({id:d.id,...d.data()}));S.ev=TIPOS.flatMap(t=>S.evBy[t]||[]);got[tp]=true;ready()},er=>{S.err="Erro";render()});
   try{await db.load()}catch(e){S.err=e.message||"Erro";render()}
