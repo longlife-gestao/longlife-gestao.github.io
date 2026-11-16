@@ -303,6 +303,7 @@ const MSG={
   confirmacao:(p,i)=>`¡Gracias, ${primeiro(p.nome)}! Hemos registrado tu aplicación del ${br(i.last?.data)}. La próxima es el ${br(i.prox)}.`,
   avaliacao:p=>`¡Hola ${primeiro(p.nome)}! Es hora del control semanal: envía tu peso y la medida de cintura de hoy y cómo te sientes del 0 al 10.`,
   cobranca:(p,i,x)=>`Hola ${primeiro(p.nome)}, el pago de ${eur(x.valor)}${x.vencimento?" con vencimiento el "+br(x.vencimento):""} (${x.descricao||"seguimiento"}) está pendiente. Para cualquier duda, estamos aquí.`,
+  lembretePag:(p,i,x)=>`¡Hola ${primeiro(p.nome)}! Recordatorio de Long Life: ${x.parcela?"su cuota "+x.parcela+"/"+x.parcelas:"su pago"} de ${eur(x.valor)} vence el ${br(x.vencimento)}${x.metodo?" (pago por "+x.metodo+")":""}. Si ya ha realizado el pago, por favor ignore este mensaje. ¡Gracias!`,
   consulta:(p,x)=>`¡Hola ${primeiro(p.nome)}! Recordatorio de Long Life: tu ${String(x.tipoConsulta||"cita").toLowerCase()} está programada para el ${br(x.data)}${x.hora?" a las "+x.hora:""}${x.modalidade==="Online"?" (online)":""}. ¿Puedes confirmar tu asistencia?`,
   recibo:(p,i,x)=>`Hola ${primeiro(p.nome)}, confirmamos el pago de ${eur(x.valor)} el ${br(x.data)}. ¡Gracias!`
 };
@@ -311,11 +312,13 @@ function waButton(p,text,label="WhatsApp"){
   if(!digits(p.telefone))return `<span class="pill p-mute">sin teléfono</span>`;
   return `<a class="btn wa sm" href="${waLink(p,text)}" target="_blank" rel="noopener" data-wa="${esc(p.id)}">${label}</a> <button class="btn ghost sm" data-copy="${esc(text)}">Copiar</button>`;
 }
+const waPag=(p,i,x)=>aVencer(x)?waButton(p,MSG.lembretePag(p,i,x),"Recordatorio"):waButton(p,MSG.cobranca(p,i,x),"Cobrar");
 function filaWa(){
   const out=[];
   for(const p of ativos()){const i=info(p);
     if(i.atraso>=-1)out.push({p,tipo:"Recordatorio de aplicación",quando:br(i.prox),text:MSG.lembrete(p,i),cls:i.atraso>1?"bad":"warn"});
     for(const x of i.pend)out.push({p,tipo:"Cobro",quando:br(x.vencimento),text:MSG.cobranca(p,i,x),cls:x.vencimento&&x.vencimento<today()?"bad":"warn"});
+    for(const x of i.avencer)if(x.vencimento<=addDays(today(),3))out.push({p,tipo:"Recordatorio de pago",quando:br(x.vencimento),text:MSG.lembretePag(p,i,x),cls:"info"});
     const lm=i.med[i.med.length-1];if(!lm||diffDays(today(),lm.data)>=7)out.push({p,tipo:"Control semanal",quando:lm?"último "+br(lm.data):"sin registro",text:MSG.avaliacao(p),cls:"mute"});
   }
   const amanha=addDays(today(),1);
@@ -420,7 +423,7 @@ function ficha(p){
     ${temPlano(p)?`<p class="s" style="color:var(--muted);margin:0 0 10px">Cobro ${p.planoPeriodo.toLowerCase()} de ${eur(p.planoValor)} desde el ${br(p.planoInicio)}${p.planoMetodo?" por "+esc(p.planoMetodo):""}. ${+p.planoParcelas?`Plan de ${p.planoParcelas} cuotas, todas ya generadas.`:`Plan continuo: el sistema mantiene ${HORIZ} meses de cuotas generadas por adelantado.`}</p>`:""}
     ${blocoIndicacoes(p,w)}
     ${w?`<div class="acts" style="justify-content:flex-start"><button class="btn gold sm" data-act="plano">${temPlano(p)?"Editar plan de pago":"Definir plan de pago"}</button><button class="btn sm" data-act="novoPagamento">+ Cargo puntual</button></div>`:""}
-    ${tabela(i.pag.slice().sort((a,b)=>(b.vencimento||b.data||"").localeCompare(a.vencimento||a.data||"")),[["Vencimiento",e=>br(e.vencimento)],["Descripción",e=>esc(descPag(e))+(e.plano?' <span class="pill p-mute">plan</span>':"")],["Importe",e=>valTxt(e)],["Método",e=>esc(e.metodo)],["Pagado el",e=>br(e.status==="pago"?e.data:"")],["Estado",e=>pillPag(e)],["",e=>e.status!=="pago"&&w?`<button class="btn ghost sm" data-pago="${e.id}">Marcar pagado</button> ${waButton(p,MSG.cobranca(p,i,e),"Cobrar")}`:e.status==="pago"?waButton(p,MSG.recibo(p,i,e),"Recibo"):""],["",e=>w?`<button class="btn ghost sm" data-editpag="${e.id}">Editar</button>`:""]],"Sin cargos.")}`;
+    ${tabela(i.pag.slice().sort((a,b)=>(b.vencimento||b.data||"").localeCompare(a.vencimento||a.data||"")),[["Vencimiento",e=>br(e.vencimento)],["Descripción",e=>esc(descPag(e))+(e.plano?' <span class="pill p-mute">plan</span>':"")],["Importe",e=>valTxt(e)],["Método",e=>esc(e.metodo)],["Pagado el",e=>br(e.status==="pago"?e.data:"")],["Estado",e=>pillPag(e)],["",e=>e.status!=="pago"&&w?`<button class="btn ghost sm" data-pago="${e.id}">Marcar pagado</button> ${waPag(p,i,e)}`:e.status==="pago"?waButton(p,MSG.recibo(p,i,e),"Recibo"):""],["",e=>w?`<button class="btn ghost sm" data-editpag="${e.id}">Editar</button>`:""]],"Sin cargos.")}`;
   }else if(S.tab==="consultas"){
     const cs=consultasDe(p.id).slice().reverse();
     body=`${w?`<div class="acts" style="justify-content:flex-start;margin-top:0"><button class="btn gold sm" data-act="novaConsulta">+ Programar cita</button></div>`:""}
@@ -430,7 +433,7 @@ function ficha(p){
     body=`${w?`<div class="acts" style="justify-content:flex-start;margin-top:0"><button class="btn gold sm" data-act="novaNota">+ Registrar contacto o nota</button></div>`:""}
     <ul class="tl">${ev.map(e=>`<li><span class="d">${br(e.data||e.vencimento)}${e.hora?"<br>"+esc(e.hora):""}</span><div><span class="k">${TL[e.tipo]?.[0]||e.tipo}</span><div>${TL[e.tipo]?.[1](e)||""}</div></div></li>`).join("")}${p.criadoEm?`<li><span class="d">${br(p.criadoEm.slice(0,10))}</span><div><span class="k">Alta</span><div>Paciente registrado${p.origem?" · origen: "+esc(p.origem):""}</div></div></li>`:""}</ul>`;
   }else if(S.tab==="mensagens"){
-    const ms=[["Recordatorio de aplicación",MSG.lembrete(p,i)],["Confirmación de aplicación",MSG.confirmacao(p,i)],["Control semanal",MSG.avaliacao(p)]];
+    const ms=[["Recordatorio de aplicación",MSG.lembrete(p,i)],["Confirmación de aplicación",MSG.confirmacao(p,i)],["Control semanal",MSG.avaliacao(p)]];const pp=i.aberto.slice().sort((a,b)=>(a.vencimento||"9").localeCompare(b.vencimento||"9"))[0];if(pp)ms.push(["Recordatorio de pago",aVencer(pp)?MSG.lembretePag(p,i,pp):MSG.cobranca(p,i,pp)]);
     body=`<p class="note">Los mensajes no incluyen dosis ni datos de salud. El botón abre WhatsApp con el texto listo para ${esc(p.telefone||"el número del paciente")}.</p>`+ms.map(([t,m])=>`<div class="panel" style="margin-top:12px"><h2>${t}</h2><div class="msgbox" style="margin:10px 0">${esc(m)}</div>${waButton(p,m,"Abrir en WhatsApp")}</div>`).join("");
   }else{
     body=`<div class="facts">${[["Teléfono",p.telefone],["Email",p.email],["Nacimiento",br(p.nascimento)],["Idioma",p.idioma],["Inicio",br(p.inicio)],["Día y hora",[p.dia,p.horario].filter(Boolean).join(" ")],["Peso inicial",num(p.pesoInicial)+" kg"],["Altura",num(p.altura,0)+" cm"],["Meta",p.meta?num(p.meta)+" kg":"—"],["Prescriptor",p.prescritor],["Etapa",p.status||"Activo"],["Origen",p.origem],["Consentimiento RGPD",p.consentimento?"Sí":"No"]].map(([k,v])=>`<div class="fact"><span>${k}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
@@ -592,7 +595,7 @@ function vFinanceiro(){
   const F=[["todos","Todos"],["aberto","Pendientes"],["vencido","Vencidos"],["avencer","Por vencer"],["pago","Pagados"]];
   const filt=(per==="mes"?doMes:base).filter(e=>S.fin==="todos"||(S.fin==="pago"?e.status==="pago":S.fin==="aberto"?e.status!=="pago":S.fin==="vencido"?stPag(e)[0]==="bad":aVencer(e))).sort((a,b)=>per==="mes"?(a.vencimento||a.data||"").localeCompare(b.vencimento||b.data||""):(b.vencimento||b.data||"").localeCompare(a.vencimento||a.data||""));
   const metodos=[...new Set(all.map(e=>e.metodo).filter(Boolean))].sort();
-  const acoes=e=>{const p=pacOf(e.pacienteId);if(!p||e.status==="pago"||!S.canWrite)return"";return `<button class="btn ghost sm" data-pago="${e.id}">Marcar pagado</button> ${waButton(p,MSG.cobranca(p,info(p),e),"Cobrar")}`};
+  const acoes=e=>{const p=pacOf(e.pacienteId);if(!p||e.status==="pago"||!S.canWrite)return"";return `<button class="btn ghost sm" data-pago="${e.id}">Marcar pagado</button> ${waPag(p,info(p),e)}`};
   return header("Finanzas","Cuotas del mes, previsión de los próximos meses y control por paciente",`<div style="display:flex;gap:8px;flex-wrap:wrap">${S.canWrite&&S.pac.length?`<button class="btn gold" data-act="novoPagamentoGeral">+ Registrar pago</button>`:""}<button class="btn ghost" data-exp="financeiro">Exportar CSV</button></div>`)+`
   <div class="finbar">
     <div class="mnav"><button class="btn ghost sm" data-fmes="prev" aria-label="Mes anterior">‹</button><b>${mesTxt(M)}</b><button class="btn ghost sm" data-fmes="next" aria-label="Mes siguiente">›</button>${M!==today().slice(0,7)?`<button class="btn ghost sm" data-fmes="hoje">Mes actual</button>`:""}</div>

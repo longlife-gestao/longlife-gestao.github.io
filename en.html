@@ -303,6 +303,7 @@ const MSG={
   confirmacao:(p,i)=>`Thank you, ${primeiro(p.nome)}! We recorded your injection from ${br(i.last?.data)}. The next one is on ${br(i.prox)}.`,
   avaliacao:p=>`Hi ${primeiro(p.nome)}! Time for your weekly check-in: please send today's weight and waist measurement and how you feel from 0 to 10.`,
   cobranca:(p,i,x)=>`Hi ${primeiro(p.nome)}, your payment of ${eur(x.valor)}${x.vencimento?" due on "+br(x.vencimento):""} (${x.descricao||"follow-up"}) is still open. If you have any questions, we are here to help.`,
+  lembretePag:(p,i,x)=>`Hi ${primeiro(p.nome)}! Friendly reminder from Long Life: your ${x.parcela?"installment "+x.parcela+"/"+x.parcelas:"payment"} of ${eur(x.valor)} is due on ${br(x.vencimento)}${x.metodo?" (payment by "+x.metodo+")":""}. If you have already paid, please disregard this message. Thank you!`,
   consulta:(p,x)=>`Hi ${primeiro(p.nome)}! Reminder from Long Life: your ${String(x.tipoConsulta||"appointment").toLowerCase()} is scheduled for ${br(x.data)}${x.hora?" at "+x.hora:""}${x.modalidade==="Online"?" (online)":""}. Can you confirm you will attend?`,
   recibo:(p,i,x)=>`Hi ${primeiro(p.nome)}, we confirm your payment of ${eur(x.valor)} on ${br(x.data)}. Thank you!`
 };
@@ -311,11 +312,13 @@ function waButton(p,text,label="WhatsApp"){
   if(!digits(p.telefone))return `<span class="pill p-mute">no phone</span>`;
   return `<a class="btn wa sm" href="${waLink(p,text)}" target="_blank" rel="noopener" data-wa="${esc(p.id)}">${label}</a> <button class="btn ghost sm" data-copy="${esc(text)}">Copy</button>`;
 }
+const waPag=(p,i,x)=>aVencer(x)?waButton(p,MSG.lembretePag(p,i,x),"Reminder"):waButton(p,MSG.cobranca(p,i,x),"Request payment");
 function filaWa(){
   const out=[];
   for(const p of ativos()){const i=info(p);
     if(i.atraso>=-1)out.push({p,tipo:"Injection reminder",quando:br(i.prox),text:MSG.lembrete(p,i),cls:i.atraso>1?"bad":"warn"});
     for(const x of i.pend)out.push({p,tipo:"Payment request",quando:br(x.vencimento),text:MSG.cobranca(p,i,x),cls:x.vencimento&&x.vencimento<today()?"bad":"warn"});
+    for(const x of i.avencer)if(x.vencimento<=addDays(today(),3))out.push({p,tipo:"Payment reminder",quando:br(x.vencimento),text:MSG.lembretePag(p,i,x),cls:"info"});
     const lm=i.med[i.med.length-1];if(!lm||diffDays(today(),lm.data)>=7)out.push({p,tipo:"Weekly check-in",quando:lm?"last "+br(lm.data):"no record",text:MSG.avaliacao(p),cls:"mute"});
   }
   const amanha=addDays(today(),1);
@@ -420,7 +423,7 @@ function ficha(p){
     ${temPlano(p)?`<p class="s" style="color:var(--muted);margin:0 0 10px">${p.planoPeriodo} billing of ${eur(p.planoValor)} since ${br(p.planoInicio)}${p.planoMetodo?" via "+esc(p.planoMetodo):""}. ${+p.planoParcelas?`Plan of ${p.planoParcelas} installments, all already created.`:`Continuous plan: the system keeps ${HORIZ} months of installments created ahead.`}</p>`:""}
     ${blocoIndicacoes(p,w)}
     ${w?`<div class="acts" style="justify-content:flex-start"><button class="btn gold sm" data-act="plano">${temPlano(p)?"Edit payment plan":"Set payment plan"}</button><button class="btn sm" data-act="novoPagamento">+ One-off charge</button></div>`:""}
-    ${tabela(i.pag.slice().sort((a,b)=>(b.vencimento||b.data||"").localeCompare(a.vencimento||a.data||"")),[["Due date",e=>br(e.vencimento)],["Description",e=>esc(descPag(e))+(e.plano?' <span class="pill p-mute">plan</span>':"")],["Amount",e=>valTxt(e)],["Method",e=>esc(e.metodo)],["Paid on",e=>br(e.status==="pago"?e.data:"")],["Status",e=>pillPag(e)],["",e=>e.status!=="pago"&&w?`<button class="btn ghost sm" data-pago="${e.id}">Mark paid</button> ${waButton(p,MSG.cobranca(p,i,e),"Request payment")}`:e.status==="pago"?waButton(p,MSG.recibo(p,i,e),"Receipt"):""],["",e=>w?`<button class="btn ghost sm" data-editpag="${e.id}">Edit</button>`:""]],"No charges.")}`;
+    ${tabela(i.pag.slice().sort((a,b)=>(b.vencimento||b.data||"").localeCompare(a.vencimento||a.data||"")),[["Due date",e=>br(e.vencimento)],["Description",e=>esc(descPag(e))+(e.plano?' <span class="pill p-mute">plan</span>':"")],["Amount",e=>valTxt(e)],["Method",e=>esc(e.metodo)],["Paid on",e=>br(e.status==="pago"?e.data:"")],["Status",e=>pillPag(e)],["",e=>e.status!=="pago"&&w?`<button class="btn ghost sm" data-pago="${e.id}">Mark paid</button> ${waPag(p,i,e)}`:e.status==="pago"?waButton(p,MSG.recibo(p,i,e),"Receipt"):""],["",e=>w?`<button class="btn ghost sm" data-editpag="${e.id}">Edit</button>`:""]],"No charges.")}`;
   }else if(S.tab==="consultas"){
     const cs=consultasDe(p.id).slice().reverse();
     body=`${w?`<div class="acts" style="justify-content:flex-start;margin-top:0"><button class="btn gold sm" data-act="novaConsulta">+ Schedule appointment</button></div>`:""}
@@ -430,7 +433,7 @@ function ficha(p){
     body=`${w?`<div class="acts" style="justify-content:flex-start;margin-top:0"><button class="btn gold sm" data-act="novaNota">+ Add contact or note</button></div>`:""}
     <ul class="tl">${ev.map(e=>`<li><span class="d">${br(e.data||e.vencimento)}${e.hora?"<br>"+esc(e.hora):""}</span><div><span class="k">${TL[e.tipo]?.[0]||e.tipo}</span><div>${TL[e.tipo]?.[1](e)||""}</div></div></li>`).join("")}${p.criadoEm?`<li><span class="d">${br(p.criadoEm.slice(0,10))}</span><div><span class="k">Created</span><div>Patient registered${p.origem?" · source: "+esc(p.origem):""}</div></div></li>`:""}</ul>`;
   }else if(S.tab==="mensagens"){
-    const ms=[["Injection reminder",MSG.lembrete(p,i)],["Injection confirmation",MSG.confirmacao(p,i)],["Weekly check-in",MSG.avaliacao(p)]];
+    const ms=[["Injection reminder",MSG.lembrete(p,i)],["Injection confirmation",MSG.confirmacao(p,i)],["Weekly check-in",MSG.avaliacao(p)]];const pp=i.aberto.slice().sort((a,b)=>(a.vencimento||"9").localeCompare(b.vencimento||"9"))[0];if(pp)ms.push(["Payment reminder",aVencer(pp)?MSG.lembretePag(p,i,pp):MSG.cobranca(p,i,pp)]);
     body=`<p class="note">Messages do not include dose or health data. The button opens WhatsApp with the text ready for ${esc(p.telefone||"the patient's number")}.</p>`+ms.map(([t,m])=>`<div class="panel" style="margin-top:12px"><h2>${t}</h2><div class="msgbox" style="margin:10px 0">${esc(m)}</div>${waButton(p,m,"Open in WhatsApp")}</div>`).join("");
   }else{
     body=`<div class="facts">${[["Phone",p.telefone],["Email",p.email],["Date of birth",br(p.nascimento)],["Language",p.idioma],["Start",br(p.inicio)],["Day and time",[p.dia,p.horario].filter(Boolean).join(" ")],["Starting weight",num(p.pesoInicial)+" kg"],["Height",num(p.altura,0)+" cm"],["Goal",p.meta?num(p.meta)+" kg":"—"],["Prescriber",p.prescritor],["Stage",p.status||"Active"],["Source",p.origem],["HIPAA consent",p.consentimento?"Yes":"No"]].map(([k,v])=>`<div class="fact"><span>${k}</span><b>${esc(v||"—")}</b></div>`).join("")}</div>
@@ -592,7 +595,7 @@ function vFinanceiro(){
   const F=[["todos","All"],["aberto","Open"],["vencido","Overdue"],["avencer","Upcoming"],["pago","Paid"]];
   const filt=(per==="mes"?doMes:base).filter(e=>S.fin==="todos"||(S.fin==="pago"?e.status==="pago":S.fin==="aberto"?e.status!=="pago":S.fin==="vencido"?stPag(e)[0]==="bad":aVencer(e))).sort((a,b)=>per==="mes"?(a.vencimento||a.data||"").localeCompare(b.vencimento||b.data||""):(b.vencimento||b.data||"").localeCompare(a.vencimento||a.data||""));
   const metodos=[...new Set(all.map(e=>e.metodo).filter(Boolean))].sort();
-  const acoes=e=>{const p=pacOf(e.pacienteId);if(!p||e.status==="pago"||!S.canWrite)return"";return `<button class="btn ghost sm" data-pago="${e.id}">Mark paid</button> ${waButton(p,MSG.cobranca(p,info(p),e),"Request payment")}`};
+  const acoes=e=>{const p=pacOf(e.pacienteId);if(!p||e.status==="pago"||!S.canWrite)return"";return `<button class="btn ghost sm" data-pago="${e.id}">Mark paid</button> ${waPag(p,info(p),e)}`};
   return header("Billing","This month's installments, forecast for the coming months and control by patient",`<div style="display:flex;gap:8px;flex-wrap:wrap">${S.canWrite&&S.pac.length?`<button class="btn gold" data-act="novoPagamentoGeral">+ Add payment</button>`:""}<button class="btn ghost" data-exp="financeiro">Export CSV</button></div>`)+`
   <div class="finbar">
     <div class="mnav"><button class="btn ghost sm" data-fmes="prev" aria-label="Previous month">‹</button><b>${mesTxt(M)}</b><button class="btn ghost sm" data-fmes="next" aria-label="Next month">›</button>${M!==today().slice(0,7)?`<button class="btn ghost sm" data-fmes="hoje">Current month</button>`:""}</div>
