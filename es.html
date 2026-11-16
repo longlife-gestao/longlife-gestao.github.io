@@ -303,7 +303,7 @@ const MSG={
   confirmacao:(p,i)=>`¡Gracias, ${primeiro(p.nome)}! Hemos registrado tu aplicación del ${br(i.last?.data)}. La próxima es el ${br(i.prox)}.`,
   avaliacao:p=>`¡Hola ${primeiro(p.nome)}! Es hora del control semanal: envía tu peso y la medida de cintura de hoy y cómo te sientes del 0 al 10.`,
   cobranca:(p,i,x)=>`Hola ${primeiro(p.nome)}, el pago de ${eur(x.valor)}${x.vencimento?" con vencimiento el "+br(x.vencimento):""} (${x.descricao||"seguimiento"}) está pendiente. Para cualquier duda, estamos aquí.`,
-  lembretePag:(p,i,x)=>`¡Hola ${primeiro(p.nome)}! Recordatorio de Long Life: ${x.parcela?"su cuota "+x.parcela+"/"+x.parcelas:"su pago"} de ${eur(x.valor)} vence el ${br(x.vencimento)}${x.metodo?" (pago por "+x.metodo+")":""}. Si ya ha realizado el pago, por favor ignore este mensaje. ¡Gracias!`,
+  lembretePag:(p,i,x)=>`¡Hola ${primeiro(p.nome)}! ¿Qué tal? 😊 Solo queríamos recordarte, con cariño, que ${x.parcela?"tu cuota "+x.parcela+"/"+x.parcelas:"tu pago"} de ${eur(x.valor)} vence el ${br(x.vencimento)}${x.metodo?" (puedes pagar por "+x.metodo+")":""}. Si ya lo has hecho, ¡muchas gracias! y no tengas en cuenta este mensaje. Cualquier duda, aquí estamos. Equipo Long Life 💙`,
   consulta:(p,x)=>`¡Hola ${primeiro(p.nome)}! Recordatorio de Long Life: tu ${String(x.tipoConsulta||"cita").toLowerCase()} está programada para el ${br(x.data)}${x.hora?" a las "+x.hora:""}${x.modalidade==="Online"?" (online)":""}. ¿Puedes confirmar tu asistencia?`,
   recibo:(p,i,x)=>`Hola ${primeiro(p.nome)}, confirmamos el pago de ${eur(x.valor)} el ${br(x.data)}. ¡Gracias!`
 };
