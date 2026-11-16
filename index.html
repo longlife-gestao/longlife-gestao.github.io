@@ -312,7 +312,7 @@ const MSG={
   confirmacao:(p,i)=>`Obrigado, ${primeiro(p.nome)}! Registámos a sua aplicação de ${br(i.last?.data)}. A próxima é em ${br(i.prox)}.`,
   avaliacao:p=>`Olá ${primeiro(p.nome)}! Hora da avaliação semanal: envie o seu peso e a medida da cintura de hoje e como se sente de 0 a 10.`,
   cobranca:(p,i,x)=>`Olá ${primeiro(p.nome)}, o pagamento de ${eur(x.valor)}${x.vencimento?" com vencimento em "+br(x.vencimento):""} (${x.descricao||"acompanhamento"}) está em aberto. Qualquer dúvida, estamos aqui.`,
-  lembretePag:(p,i,x)=>`Olá ${primeiro(p.nome)}! Lembrete da Long Life: ${x.parcela?"a sua parcela "+x.parcela+"/"+x.parcelas:"o seu pagamento"} de ${eur(x.valor)} vence em ${br(x.vencimento)}${x.metodo?" (pagamento por "+x.metodo+")":""}. Se já efetuou o pagamento, por favor ignore esta mensagem. Obrigado!`,
+  lembretePag:(p,i,x)=>`Olá ${primeiro(p.nome)}, tudo bem? 😊 Passamos só para lembrar, com carinho, que ${x.parcela?"a sua parcela "+x.parcela+"/"+x.parcelas:"o seu pagamento"} de ${eur(x.valor)} vence no dia ${br(x.vencimento)}${x.metodo?" (pode pagar por "+x.metodo+")":""}. Se já tratou disso, muito obrigado e pode ignorar esta mensagem! Qualquer dúvida, estamos sempre por aqui. Equipa Long Life 💙`,
   consulta:(p,x)=>`Olá ${primeiro(p.nome)}! Lembrete da Long Life: a sua ${String(x.tipoConsulta||"consulta").toLowerCase()} está marcada para ${br(x.data)}${x.hora?" às "+x.hora:""}${x.modalidade==="Online"?" (online)":""}. Pode confirmar a presença?`,
   recibo:(p,i,x)=>`Olá ${primeiro(p.nome)}, confirmamos o pagamento de ${eur(x.valor)} em ${br(x.data)}. Obrigado!`
 };
